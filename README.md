@@ -222,8 +222,9 @@ the state being rendered (a 96% VRAM bar must be red, a hot GPU must be flagged)
   fields a given build is missing rather than guessing.
 - The optional desktop panel uses tkinter, which ships with CPython on Windows and macOS; on Linux it
   needs `python3-tk`.
-- Model switching expects a llama-swap 4.x server in front of the engine (`/models`, `/loaded`,
-  `/switch`). Without one, that module is simply unused.
+- Model switching expects a llama-swap server in front of the engine (catalog at `/models`, swap via
+  `POST /switch`). Current builds report 404 for `/loaded`; the reader falls back to catalog status plus
+  the model name the engine reports for itself. Without a swap server, that module is simply unused.
 - Single-user local use. No authentication layer: point it at localhost.
 
 ## Roadmap
@@ -242,7 +243,7 @@ the state being rendered (a 96% VRAM bar must be red, a hot GPU must be flagged)
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache License 2.0. See [LICENSE](LICENSE).
 
 The `llama.cpp` and `llama-swap` names refer to third-party products by their respective owners; this
-project is not affiliated with or endorsed by them.
+project is not affiliated with or endorsed by them, and no code from either project is vendored here.
