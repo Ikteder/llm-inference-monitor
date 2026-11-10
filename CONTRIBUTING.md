@@ -26,13 +26,15 @@ suite still says the same thing on a clean machine with nothing listening".
 
 ```bash
 python -m pytest -q                 # expect 48 passed, no skips on a box with the stack running
-python -m monitor.selfcheck         # derived math against worked examples, no services needed
-python -m monitor.selfcheck --live  # also asserts each field the dashboard reads really exists
+python -m monitor.selfcheck         # README claims and entry points, no services needed
+python -m monitor.selfcheck --live  # also asserts each live field the dashboard reads exists
 python tools/render_sample.py       # deterministic render of one panel frame to PNG
 python tools/check_render.py        # asserts every band of that PNG has content and sane color mix
 ```
 
-All five must pass. CI runs the pytest and selfcheck legs across Python 3.10 to 3.14.
+All five must pass. CI runs the pytest, selfcheck and render legs across Python 3.10 to 3.14. The
+selfcheck exits non-zero on a clean runner only for real breakage: checks that need a live stack are
+reported as skipped rather than passed, so a check that never ran cannot look like one that agreed.
 
 The render checks exist because a visual layer is otherwise unverifiable in CI. Screen capture is not
 used: a grabbed frame depends on window stacking, composition and whether the window is on screen at

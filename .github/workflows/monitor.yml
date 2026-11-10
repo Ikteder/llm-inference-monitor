@@ -29,7 +29,6 @@ jobs:
           python tools/check_render.py
       - name: Pytest
         run: python -m pytest -q
-
   package:
     name: Build wheel and sdist
     runs-on: ubuntu-latest

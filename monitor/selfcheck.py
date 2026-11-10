@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+from pathlib import Path
 import re
 import sys
 
@@ -21,6 +22,7 @@ from monitor.economics import context_economics, speculation, vram_budget
 from monitor.vram import Calibration, context_cost, growth_projection, headroom, usable_vram_bytes
 
 CHECKS: list[tuple[str, bool, str]] = []
+SKIPPED: list[tuple[str, str]] = []
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -43,6 +45,14 @@ MODULE_FOR_CLAIM = {
 }
 
 
+# Render tools are plain scripts, not modules of the package. A reader copying them from the README
+# runs them against a checkout, so they belong in the same guarantee.
+SCRIPT_FOR_CLAIM = {
+    "tools/render_sample.py": "tools/render_sample.py",
+    "tools/check_render.py": "tools/check_render.py",
+}
+
+
 def readme_commands() -> list[str]:
     try:
         with open("README.md", encoding="utf-8") as fh:
@@ -53,7 +63,7 @@ def readme_commands() -> list[str]:
     for block in re.findall(r"```(?:bash|text)\n(.*?)```", text, re.S):
         for line in block.splitlines():
             line = line.strip()
-            if line.startswith("python -m monitor"):
+            if line.startswith("python -m monitor") or line.startswith("python tools/"):
                 out.append(line)
     return out
 
@@ -62,20 +72,26 @@ def check_readme_commands() -> None:
     claims = readme_commands()
     check("README shows runnable commands", len(claims) >= 6, f"{len(claims)} found")
     for claim in claims:
-        tok = re.search(r"python -m (monitor[\w.]*)", claim)
-        if not tok:
-            check(f"mapped: {claim}", False, "unrecognized command form")
+        mod_tok = re.search(r"python -m (monitor[\w.]*)", claim)
+        if mod_tok:
+            mod_name = MODULE_FOR_CLAIM.get(mod_tok.group(1))
+            if mod_name is None:
+                check(f"mapped: {claim}", False, f"no module registered for {mod_tok.group(1)}")
+                continue
+            try:
+                mod = importlib.import_module(mod_name)
+            except Exception as exc:  # noqa: BLE001 - report any import failure plainly
+                check(f"imports: {mod_name}", False, f"{type(exc).__name__}: {exc}")
+                continue
+            check(f"README command backed by code: {claim}", callable(getattr(mod, "main", None)), mod_name)
             continue
-        mod_name = MODULE_FOR_CLAIM.get(tok.group(1))
-        if mod_name is None:
-            check(f"mapped: {claim}", False, f"no module registered for {tok.group(1)}")
+        script_tok = re.search(r"python (tools/[\w.]+)", claim)
+        if script_tok:
+            expected = SCRIPT_FOR_CLAIM.get(script_tok.group(1))
+            ok = bool(expected) and Path(expected).is_file()
+            check(f"README command backed by code: {claim}", ok, "" if ok else f"no such file: {script_tok.group(1)}")
             continue
-        try:
-            mod = importlib.import_module(mod_name)
-        except Exception as exc:  # noqa: BLE001 - report any import failure plainly
-            check(f"imports: {mod_name}", False, f"{type(exc).__name__}: {exc}")
-            continue
-        check(f"README command backed by code: {claim}", callable(getattr(mod, "main", None)), mod_name)
+        check(f"mapped: {claim}", False, "unrecognized command form")
 
 
 def check_readme_numbers() -> None:
@@ -99,10 +115,14 @@ def check_math() -> None:
 
     A misread millisecond field once turned a 260 s prefill into a 260,000 s one, so units are
     asserted explicitly here rather than only checking that a key exists.
+
+    These checks need real engine totals to compare against. With nothing listening they are reported
+    as skipped rather than passed: a math check that never ran must not look like a math check that
+    agreed. Use --live on a box with the stack running, where they run for real.
     """
     eng = fetch_engine(DEFAULT_ENGINE)
     if not eng.ok:
-        check("engine reachable for math checks", False, DEFAULT_ENGINE)
+        SKIPPED.append(("derived math against live engine totals", f"no engine at {DEFAULT_ENGINE}"))
         return
 
     econ = context_economics(eng)
@@ -179,7 +199,7 @@ SWAP_SERIES = [
 def check_live_fields() -> None:
     eng = fetch_engine(DEFAULT_ENGINE)
     if not eng.ok:
-        check("live engine reachable", False, DEFAULT_ENGINE)
+        SKIPPED.append(("live field presence against the engine", f"no engine at {DEFAULT_ENGINE}"))
         return
 
     missing = [f for f in ENGINE_FIELDS if getattr(eng, f, None) in (None, "")]
@@ -190,7 +210,7 @@ def check_live_fields() -> None:
 
     swap = fetch_swap(DEFAULT_SWAP)
     if not swap.get("ok"):
-        check("llama-swap reachable for hardware fields", False, DEFAULT_SWAP or str(swap.get("error")))
+        SKIPPED.append(("llama-swap hardware series cross-check", f"no swap at {DEFAULT_SWAP or '?'}"))
     else:
         series = swap.get("series") or {}
         # Series names carry labels like [id=0,name=...], so match on the metric name prefix.
@@ -229,7 +249,13 @@ def main() -> int:
     for name, ok, detail in CHECKS:
         print(f"  [{'ok' if ok else 'FAIL'}] {name}" + (f"\n         -> {detail}" if not ok and detail else ""))
         failed += 0 if ok else 1
-    print(f"\n{len(CHECKS) - failed}/{len(CHECKS)} checks passed")
+    for name, why in SKIPPED:
+        print(f"  [skip] {name}\n         -> {why}")
+    ran = len(CHECKS) - failed
+    line = f"\n{ran}/{len(CHECKS)} checks passed"
+    if SKIPPED:
+        line += f", {len(SKIPPED)} skipped (no live stack)"
+    print(line)
     return 1 if failed else 0
 
 

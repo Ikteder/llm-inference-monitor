@@ -190,9 +190,14 @@ loading the wrong weights is worse than not loading anything.
 
 ```bash
 python -m pytest -q          # offline unit tests; live-service tests self-skip
-python -m monitor.selfcheck  # checks the derived math against worked examples
+python -m monitor.selfcheck  # checks README claims and entry points are real
 python tools/check_render.py # verifies the panel actually rasterizes into readable content
 ```
+
+The selfcheck needs no services. It maps every command line printed in this README to a module that
+must import, and fails if one is missing. The derived-math comparisons need live engine totals to check
+against, so on a machine with nothing running they are reported as skipped rather than passed: a check
+that never ran must not look like a check that agreed. Add `--live` next to a running stack to run them.
 
 Offline coverage includes: Prometheus text parsing, metrics normalization from partial payloads, cache
 and speculation math with pinned magnitudes (a misread millisecond field once turned a 260 s prefill into
