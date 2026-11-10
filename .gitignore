@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+dist/
+build/
+.inference-monitor/
+
+# Working notes on reverse-engineering a server's metric and catalog shapes. These describe one
+# reference install, not the code in this repo, so they stay out of the published tree.
+.devnotes/
